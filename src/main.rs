@@ -1,27 +1,23 @@
 use std::process::exit;
-
 use std::thread::sleep;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use termion::event::Key;
-use termion::input::TermRead;
-use termion::raw::IntoRawMode;
-use std::process::Command;
+use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::terminal::{ClearType, Clear};
 
 fn main() {
     let (mut game, mut direction) = init();
     let mut game = Arc::new(Mutex::new(game));
     let game_clone = Arc::clone(&game);
-    //Arc<Mutex<Vec<Vec<u8>>>>
+
     thread::spawn(move || {
         loop {
             let cloned_game = Arc::clone(&game_clone);
             let mut game = cloned_game.lock().unwrap();
 
             print_game(&game);
-            /*let mut clear = Command::new("clear");
-            clear.status().unwrap();*/
+
             *game = ball_move(&mut game.clone(), &mut direction);
             drop(game);
 
@@ -29,27 +25,24 @@ fn main() {
         }
     });
 
-    
-loop{
-    let cloned_game = Arc::clone(&game);
-    
-    let mut stdout = std::io::stdout()/*.into_raw_mode().unwrap()*/;
-    let stdin = std::io::stdin();
+    loop {
+        let cloned_game = Arc::clone(&game);
 
-    for key in stdin.keys() {
-        if let Ok(event) = key {
-            let mut game = cloned_game.lock().unwrap();
-            match event {
-                Key::Left => *game = move_left(&mut game),
-                Key::Right => *game =  move_right(&mut game),
-                _ => (),
+        for event_result in crossterm::event::poll(Duration::from_millis(100)) {
+            if event_result {
+                if let crossterm::event::Event::Key(event) = crossterm::event::read().unwrap() {
+                    let mut game = cloned_game.lock().unwrap();
+                    match event.code {
+                        KeyCode::Left => *game = move_left(&mut game),
+                        KeyCode::Right => *game = move_right(&mut game),
+                        _ => (),
+                    }
+                }
+            } else {
+                // Handle the case when there is no event
             }
         }
     }
-    drop(stdout);
-}
-
-
 }
 
 
