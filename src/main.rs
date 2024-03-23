@@ -3,25 +3,65 @@ use std::thread::sleep;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use crossterm::event::{KeyCode, KeyEvent};
-use crossterm::terminal::{ClearType, Clear};
+use crossterm::event::KeyCode;
+use std::process::Command;
+use std::fs::File;
+use std::io::BufReader;
+use rodio::{Decoder, OutputStream, source::Source};
+use std::process::Stdio;
+
 
 fn main() {
     let (mut game, mut direction) = init();
     let mut game = Arc::new(Mutex::new(game));
     let game_clone = Arc::clone(&game);
 
+    let mut score: u32 = 0;
+
+    thread::spawn(||{
+        loop{
+            let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+            // Load a sound from a file, using a path relative to Cargo.toml
+            let file = BufReader::new(File::open("music.mp3").unwrap());
+            // Decode that sound file into a source
+            let source = Decoder::new(file).unwrap();
+            // Play the sound directly on the device
+            stream_handle.play_raw(source.convert_samples());
+            thread::sleep(Duration::from_secs(183));
+        }
+    });
+
     thread::spawn(move || {
         loop {
+            if score % 50 == 0 && score != 0 {
+                clear_screen();
+
+            }
+            score = score + 1;
             let cloned_game = Arc::clone(&game_clone);
             let mut game = cloned_game.lock().unwrap();
 
-            print_game(&game);
+            print_game(&game, &score);
 
             *game = ball_move(&mut game.clone(), &mut direction);
             drop(game);
 
-            sleep(Duration::from_millis(100));
+            let time: u64 = {
+                if score < 50{
+                    250
+                }
+                else if score < 100{
+                    200
+                }
+                else if score < 150{
+                    150
+                }
+                else {
+                    100
+                }
+
+            }; 
+            sleep(Duration::from_millis(time));
         }
     });
 
@@ -47,9 +87,10 @@ fn main() {
 
 
 
-fn print_game(game: &Vec<Vec<u8>>){
+fn print_game(game: &Vec<Vec<u8>>, score: &u32){
     for i in game.iter(){
         for j in i.iter(){
+
             if j == &0 {
                 print!(" ");
             }
@@ -66,8 +107,13 @@ fn print_game(game: &Vec<Vec<u8>>){
                 print!("|");
             }
         }
+
         println!("");
     }
+    print!("Score: {}", score);
+    println!("");
+
+
 }
 
 fn move_left(game: &mut Vec<Vec<u8>> ) -> Vec<Vec<u8>> {
@@ -94,11 +140,28 @@ fn ball_move(game: &mut Vec<Vec<u8>>, direction: &mut String) -> Vec<Vec<u8>> {
     let  (mut i, mut j) = find_ball(&game);
     // let (i,j) = (i as usize,j as usize);
 
-    if i == 28 && game[i+1][j] != 2{
+    if i == 28 && game[i+1][j] != 2 && game[i+1][j+1] != 2 && game[i+1][j-1] != 2 {
         lose();
     }
 
 //directions
+
+    //dirs
+
+    if i != 29 && j != 0 && game[i-1][j] == 1 && game[i-1][j+1] == 1 && game[i-1][j-1] == 1{
+        game[i-1][j] = 0;
+        game[i-1][j+1] = 0;
+        game[i-1][j-1] = 0;
+        *direction = String::from("down-left")
+    }
+    if i != 29 && j != 29 && game[i-1][j+1] == 1{
+        game[i-1][j+1] = 0;
+        *direction = String::from("down-right")
+    }
+    if i != 0 && j != 0 && game[i+1][j-1] == 1{
+        game[i+1][j-1] = 0;
+        *direction = String::from("up-left")
+    }
 
    // simple directions
 if i != 29 && game[i + 1][j] == 1 {
@@ -126,6 +189,12 @@ if i != 29 && game[i + 1][j] == 2 && game[i+1][j-1] == 0 {
 if i != 29 && game[i + 1][j] == 2 && game[i+1][j+1] == 0 {
     *direction = String::from("up-right");
 }
+if i == 28 && game[i+1][j-1] == 2 && game[i+1][j] != 2 {
+    *direction = String::from("up-left");
+}
+if i == 28 && game[i+1][j+1] == 2 && game[i+1][j] != 2 {
+    *direction = String::from("up-right");
+}
 
     //double directions
 
@@ -146,14 +215,6 @@ if i != 29 && game[i + 1][j] == 2 && game[i+1][j+1] == 0 {
         *direction = String::from("down-right")
     }
 
-    //dirs
-
-    if i != 29 && j != 0 && game[i-1][j] == 1 && game[i-1][j+1] == 1 && game[i-1][j-1] == 1{
-        game[i-1][j] = 0;
-        game[i-1][j+1] = 0;
-        game[i-1][j-1] = 0;
-        *direction = String::from("down")
-    }
 
     //borders
 
@@ -174,7 +235,12 @@ if i != 29 && game[i + 1][j] == 2 && game[i+1][j+1] == 0 {
     if i == 0 && j == 29{
         *direction = String::from("down-left")
     }
-
+    if i != 29 && j != 0 && i != 0 && j != 29 && game[i-1][j-1] == 1 {
+        *direction = String::from("down-right")
+    }
+    if i != 29 && j != 0 && i != 0 && j != 29 && game[i+1][j+1] == 1 {
+        *direction = String::from("down-left")
+    }
      // moves
 
      if i != 0 && *direction == "up" {
@@ -316,4 +382,21 @@ fn lose(){
    // sleep(Duration::from_millis(3000));
     exit(0);
 
+}
+
+#[cfg(target_os = "windows")]
+fn clear_screen() {
+    let output = Command::new("cmd")
+    .args(&["/C", "cls"])
+    .stdout(Stdio::inherit())
+    .stderr(Stdio::inherit())
+    .output()
+    .expect("Failed to clear screen");
+}
+
+#[cfg(not(target_os = "windows"))]
+fn clear_screen() {
+    let mut clear: Command = Command::new("clear");
+
+    clear.spawn().unwrap();
 }
